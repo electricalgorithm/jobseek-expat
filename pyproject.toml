@@ -1,0 +1,18 @@
+[project]
+name = "jobseek-expat"
+version = "0.1.0"
+description = "CLI tool for finding English-speaking jobs for expats worldwide"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langdetect>=1.0.9",
+    "pandas>=2.3.3",
+    "python-jobspy>=1.1.82",
+    "rich>=14.2.0",
+    "typer>=0.21.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
