@@ -21,22 +21,29 @@ It scrapes major job boards, filters out local-language requirements, and presen
 
 ## 📦 Installation
 
-This project is built with Python. We recommend using `uv` for lightning-fast dependency management, but `pip` works too.
+### From PyPI (Recommended)
 
 ```bash
-# Clone the repository
+pip install jobseek-expat
+```
+
+### From Source
+
+```bash
 git clone https://github.com/electricalgorithm/jobseek-expat.git
 cd jobseek-expat
-
-# Run directly
-uv run main.py --help
+pip install .
 ```
 
 ## 🛠️ Usage
 
-The generic syntax is:
+Once installed, the `jobseek-expat` command (and its short alias `je`) is available globally.
+
+Generic syntax:
 ```bash
-uv run main.py "KEYWORD" --country "COUNTRY_NAME" [OPTIONS]
+jobseek-expat "KEYWORD" --country "COUNTRY_NAME" [OPTIONS]
+# or simply:
+je "KEYWORD" --country "COUNTRY_NAME" [OPTIONS]
 ```
 
 ### Examples
@@ -44,13 +51,13 @@ uv run main.py "KEYWORD" --country "COUNTRY_NAME" [OPTIONS]
 **1. The Classic Expat Search (Berlin)**
 Find "Software Engineer" jobs in **Germany** (Berlin) that likely don't require German.
 ```bash
-uv run main.py "Software Engineer" --location "Berlin" --country "Germany"
+jobseek-expat "Software Engineer" --location "Berlin"
 ```
 
 **2. Multi-City & Remote Search**
 Search for "Product Manager" in **Amsterdam** and **Remote** within the **Netherlands**.
 ```bash
-uv run main.py "Product Manager" \
+jobseek-expat "Product Manager" \
   --country "Netherlands" \
   --location "Amsterdam, Remote" \
   --local-language "Dutch"
@@ -60,7 +67,7 @@ uv run main.py "Product Manager" \
 **3. The "Broad Net" Strategy**
 Search for **Developer** OR **Data Scientist** roles in **France**, specifically **Paris**, excluding internships.
 ```bash
-uv run main.py "Developer, Data Scientist" \
+jobseek-expat "Developer, Data Scientist" \
   --country "France" \
   --location "Paris" \
   --local-language "French" \

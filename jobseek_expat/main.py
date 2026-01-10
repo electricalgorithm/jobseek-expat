@@ -1,9 +1,7 @@
 import pandas as pd
 from jobspy import scrape_jobs
 import typer
-from typing import Optional
 from langdetect import detect, LangDetectException
-import sys
 import logging
 
 # Suppress some logging derived from libraries if needed
@@ -12,6 +10,12 @@ logging.getLogger("jobspy").setLevel(logging.WARNING)
 app = typer.Typer()
 
 def is_english(text: str) -> bool:
+    """
+    Detect if the given text is in English.
+
+    Uses the 'langdetect' library. Returns False if text is too short (<10 chars)
+    or if detection fails.
+    """
     if not text or len(text) < 10:
         return False
     try:
@@ -92,7 +96,7 @@ def search(
     search_keywords = [k.strip() for k in keyword.split(",") if k.strip()]
     
     if location:
-        search_locations = [l.strip() for l in location.split(",") if l.strip()]
+        search_locations = [loc_str.strip() for loc_str in location.split(",") if loc_str.strip()]
     else:
         search_locations = [country] # Default to country level search
     
@@ -222,7 +226,7 @@ def search(
         valid_jobs.append(row)
 
     if output_format == "table":
-        typer.echo(f"Filtering Report:")
+        typer.echo("Filtering Report:")
         typer.echo(f"  Total Scraped: {len(jobs)}")
         typer.echo(f"  Non-English/Too Short: {language_skipped}")
         typer.echo(f"  {local_language} Required: {requirement_skipped}")
@@ -287,8 +291,10 @@ def search(
             job_lvl = str(job.get('job_level', 'N/A'))
             site = str(job.get('site', 'N/A'))
             
-            if job_lvl == "nan": job_lvl = "-"
-            if date_posted == "nan": date_posted = "-"
+            if job_lvl == "nan":
+                job_lvl = "-"
+            if date_posted == "nan":
+                date_posted = "-"
             
             # Create a clickable link text using Rich markup
             # This keeps the table clean. The URL is embedded.
