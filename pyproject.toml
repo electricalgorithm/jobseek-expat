@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "jobseek-expat"
 version = "0.1.0"
@@ -12,7 +16,25 @@ dependencies = [
     "typer>=0.21.1",
 ]
 
+[project.scripts]
+jobseek-expat = "jobseek_expat.main:app"
+je= "jobseek_expat.main:app"
+
 [dependency-groups]
 dev = [
+    "mypy>=1.19.1",
+    "pandas-stubs>=2.3.3.251219",
     "pytest>=9.0.2",
+    "ruff>=0.14.11",
+    "types-requests>=2.32.4.20260107",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["jobspy", "langdetect"]
+ignore_missing_imports = true
+
+
