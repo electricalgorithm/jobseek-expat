@@ -4,6 +4,8 @@ import typer
 from langdetect import detect, LangDetectException
 import logging
 
+from jobseek_expat.alert_generator import generate_job_alerts
+
 # Suppress some logging derived from libraries if needed
 logging.getLogger("jobspy").setLevel(logging.WARNING)
 
@@ -197,7 +199,7 @@ def search(
                 if not jobs.empty:
                     all_jobs_list.append(jobs)
             except Exception as e:
-                typer.echo(f"Error scraping jobs for '{kw}': {e}", err=True)
+                typer.echo(f"Error scraping jobs for '{kw}': {e}")
                 # Continue to next keyword instead of returning
                 continue
 
@@ -358,6 +360,264 @@ def search(
             )
 
         console.print(table)
+
+
+@app.command()
+def analyze_cv(
+    cv_file: str = typer.Argument(..., help="Path to CV file (PDF, DOCX, or TXT)"),
+    countries: str = typer.Option(
+        "Germany",
+        "--countries",
+        "-c",
+        help="Comma-separated list of target countries (e.g., 'Germany,Netherlands,Sweden')",
+    ),
+    locations: str = typer.Option(
+        "Remote",
+        "--locations",
+        "-l",
+        help="Comma-separated list of cities or 'Remote' (e.g., 'Berlin,Munich,Remote')",
+    ),
+    api_key: str = typer.Option(
+        None,
+        "--api-key",
+        help="Gemini API key (or set GEMINI_API_KEY env var)",
+        envvar="GEMINI_API_KEY",
+    ),
+    model: str = typer.Option(
+        "gemini-2.5-flash",
+        "--model",
+        help="Gemini model to use",
+    ),
+    output_format: str = typer.Option(
+        "json",
+        "--output",
+        "-o",
+        help="Output format: 'json' or 'table'",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed logs"),
+):
+    """
+    Analyze your CV and extract job search parameters using AI.
+
+    AI analyzes your CV to extract job titles, skills, and experience level.
+    You specify target countries and locations to generate personalized job alerts.
+
+    Examples:
+
+        # Analyze CV for jobs in Germany (default)
+        jobseek-expat analyze-cv resume.pdf
+
+        # Specify multiple countries and locations
+        jobseek-expat analyze-cv resume.pdf --countries "Germany,Netherlands" --locations "Berlin,Amsterdam,Remote"
+
+        # Remote-only jobs in multiple countries
+        jobseek-expat analyze-cv cv.docx -c "Sweden,Denmark,Norway" -l "Remote"
+
+        # View results in formatted table
+        jobseek-expat analyze-cv resume.pdf --output table
+
+        # Use specific API key
+        jobseek-expat analyze-cv resume.pdf --api-key YOUR_KEY
+    """
+    import json
+    import os
+    import time
+    from pathlib import Path
+
+    from rich.console import Console
+    from rich.table import Table
+    from rich import box
+
+    from jobseek_expat.cv_analyzer import extract_text_from_file, analyze_cv_with_gemini
+
+    console = Console()
+    start_time = time.time()
+
+    # Validate API key
+    if not api_key:
+        error_response = {
+            "success": False,
+            "error": {
+                "code": "API_KEY_MISSING",
+                "message": "Gemini API key not found. Set GEMINI_API_KEY environment variable or use --api-key flag",
+            },
+        }
+        if output_format == "json":
+            print(json.dumps(error_response, indent=2))
+        else:
+            console.print(
+                "[red]Error:[/red] Gemini API key not found.\n"
+                "Set GEMINI_API_KEY environment variable or use --api-key flag."
+            )
+        raise typer.Exit(code=1)
+
+    # Validate file
+    if not os.path.exists(cv_file):
+        error_response = {
+            "success": False,
+            "error": {
+                "code": "FILE_NOT_FOUND",
+                "message": f"CV file not found: {cv_file}",
+            },
+        }
+        if output_format == "json":
+            print(json.dumps(error_response, indent=2))
+        else:
+            console.print(f"[red]Error:[/red] File not found: {cv_file}")
+        raise typer.Exit(code=1)
+
+    try:
+        # Step 1: Extract text
+        if verbose:
+            console.print(f"[cyan]Extracting text from {cv_file}...[/cyan]")
+
+        cv_text = extract_text_from_file(cv_file)
+
+        if not cv_text or len(cv_text) < 100:
+            error_response = {
+                "success": False,
+                "error": {
+                    "code": "EXTRACTION_FAILED",
+                    "message": "Could not extract sufficient text from CV. File may be empty or corrupted.",
+                },
+            }
+            if output_format == "json":
+                print(json.dumps(error_response, indent=2))
+            else:
+                console.print("[red]Error:[/red] Could not extract text from CV.")
+            raise typer.Exit(code=1)
+
+        if verbose:
+            console.print(f"[green]✓[/green] Extracted {len(cv_text)} characters")
+
+        # Step 2: Analyze with Gemini
+        if verbose:
+            console.print(f"[cyan]Analyzing CV with {model}...[/cyan]")
+
+        analysis_data = analyze_cv_with_gemini(cv_text, api_key, model)
+
+        if verbose:
+            console.print("[green]✓[/green] Analysis complete")
+
+        # Step 3: Generate job alerts from AI analysis + user preferences
+        countries_list = [c.strip() for c in countries.split(",")]
+        locations_list = [loc.strip() for loc in locations.split(",")]
+
+        suggested_alerts = generate_job_alerts(
+            job_titles=analysis_data["job_titles"],
+            exclude_keywords=analysis_data["exclude_keywords"],
+            countries=countries_list,
+            locations=locations_list,
+        )
+
+        # Add generated alerts to analysis data
+        analysis_data["suggested_alerts"] = suggested_alerts
+        analysis_data["target_countries"] = countries_list
+        analysis_data["target_locations"] = locations_list
+
+        # Step 4: Build response
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        file_size_kb = int(Path(cv_file).stat().st_size / 1024)
+
+        response = {
+            "success": True,
+            "data": analysis_data,
+            "metadata": {
+                "filename": Path(cv_file).name,
+                "file_size_kb": file_size_kb,
+                "processing_time_ms": processing_time_ms,
+                "model_used": model,
+            },
+        }
+
+        # Step 4: Output
+        if output_format == "json":
+            print(json.dumps(response, indent=2, ensure_ascii=False))
+        else:
+            # Table output
+            console.print("\n[bold cyan]CV Analysis Results[/bold cyan]\n")
+
+            # Job Titles
+            console.print("[bold]Job Titles:[/bold]")
+            for title in analysis_data.get("job_titles", []):
+                console.print(f"  • {title}")
+
+            # Skills
+            console.print("\n[bold]Technical Skills:[/bold]")
+            for skill in analysis_data.get("skills", []):
+                console.print(f"  • {skill}")
+
+            # Experience
+            console.print(
+                f"\n[bold]Experience:[/bold] {analysis_data.get('experience_years', 0)} years ({analysis_data.get('experience_level', 'N/A')})"
+            )
+
+            # Spoken Languages only
+            langs = analysis_data.get("languages", {})
+            if langs.get("spoken"):
+                console.print("\n[bold]Spoken Languages:[/bold]")
+                for lang in langs["spoken"]:
+                    console.print(f"  • {lang}")
+
+            # Target Countries/Cities (from user input)
+            console.print(
+                f"\n[bold]Target Countries:[/bold] {', '.join(analysis_data.get('target_countries', []))}"
+            )
+            console.print(
+                f"[bold]Target Locations:[/bold] {', '.join(analysis_data.get('target_locations', []))}"
+            )
+
+            # Exclude Keywords
+            if analysis_data.get("exclude_keywords"):
+                console.print(
+                    f"\n[bold]Exclude from Search:[/bold] {', '.join(analysis_data.get('exclude_keywords', []))}"
+                )
+
+            # Suggested Alerts
+            suggested = analysis_data.get("suggested_alerts", [])
+            if suggested:
+                console.print("\n[bold green]Suggested Job Alerts:[/bold green]\n")
+
+                table = Table(box=box.ROUNDED, show_lines=True)
+                table.add_column("Keyword", style="cyan")
+                table.add_column("Country", style="magenta")
+                table.add_column("Location", style="green")
+                table.add_column("Exclude", style="yellow")
+
+                for alert in suggested:
+                    table.add_row(
+                        alert.get("keyword", ""),
+                        alert.get("country", ""),
+                        alert.get("location", ""),
+                        alert.get("exclude", ""),
+                    )
+
+                console.print(table)
+
+            # Metadata
+            console.print(
+                f"\n[dim]Processed in {processing_time_ms}ms using {model}[/dim]"
+            )
+
+    except Exception as e:
+        error_response = {
+            "success": False,
+            "error": {
+                "code": "ANALYSIS_FAILED",
+                "message": str(e),
+            },
+        }
+        if output_format == "json":
+            print(json.dumps(error_response, indent=2))
+        else:
+            console.print(f"[red]Error:[/red] {e}")
+
+        if verbose:
+            import traceback
+
+            traceback.print_exc()
+
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
