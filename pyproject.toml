@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jobseek-expat"
-version = "0.1.0"
+version = "1.2.0"
 description = "CLI tool for finding English-speaking jobs for expats worldwide"
 readme = "README.md"
 requires-python = ">=3.12"
